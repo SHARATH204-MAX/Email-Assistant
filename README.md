@@ -6,148 +6,44 @@ I built this project to solve a simple everyday problem: writing repetitive emai
 
 ---
 
-## System Architecture & Complete Workflow
+## System Architecture
 
-Here is the detailed architectural breakdown and end-to-end data flow of the project.
-
-### 1. High-Level Architecture Diagram
+Here is the simple block structure diagram showing how the frontend, backend, and AI service connect:
 
 ```mermaid
-flowchart TB
-    %% Client Interfaces
-    subgraph Clients ["1. CLIENT INTERFACES"]
-        subgraph WebStudio ["💻 React Web Studio (Vite :5173)"]
-            UI_Input["• Input Textarea (Original Email)<br/>• Tone Selector (6 Styles)<br/>• Length Toggle (Concise / Balanced / Detailed)<br/>• Custom Instructions Input"]
-            UI_State["• React State & Settings Manager<br/>• LocalStorage History (Last 20 drafts)<br/>• Live Health Polling Badge"]
-            UI_Actions["• In-Place Text Editor<br/>• 1-Click Clipboard Copy<br/>• Quick Refinement Chips"]
-        end
-
-        subgraph Extension ["🧩 Gmail Chrome Extension (Manifest V3)"]
-            Ext_Observer["• MutationObserver<br/>(Listens for compose window in Gmail DOM)"]
-            Ext_Extract["• Context Extractor<br/>(Reads email thread: .h7, .a3s.aiL, .gmail_quote)"]
-            Ext_Inject["• DOM Injector<br/>(Pastes reply into [role='textbox'][g_editable='true'])"]
-        end
+flowchart LR
+    subgraph Clients ["1. Client Layer"]
+        direction TB
+        A["💻 React Web App<br/>(Vite + Material UI)"]
+        B["🧩 Chrome Extension<br/>(Gmail Integration)"]
     end
 
-    %% Spring Boot Backend Service
-    subgraph Backend ["2. SPRING BOOT BACKEND SERVICE (Port 8080)"]
-        subgraph APIGateway ["REST Controller Layer"]
-            CORS["@CrossOrigin(origins = '*')"]
-            HealthEP["GET /api/email/health<br/>(Returns status UP + API key readiness)"]
-            GenEP["POST /api/email/generate<br/>(Accepts EmailRequest JSON DTO)"]
-        end
-
-        subgraph CoreService ["Business Logic & Prompt Engineering"]
-            KeyResolver["🔑 Key Resolver<br/>(Uses client apiKey if provided, else server GEMINI_KEY)"]
-            PromptPipeline["🧠 Prompt Engineering Pipeline<br/>• Enforces: Do NOT generate subject line<br/>• Injects user tone: professional, casual, etc.<br/>• Applies length: concise, balanced, detailed<br/>• Appends original email thread"]
-            PayloadBuilder["📦 Request Builder<br/>Formats JSON: { contents: [{ parts: [{ text }] }] }"]
-        end
-
-        subgraph ReactiveClient ["Reactive HTTP Engine"]
-            WebClient["⚡ Spring WebFlux WebClient<br/>(Non-blocking asynchronous POST)"]
-            ErrorHandler["🛡️ Exception & Error Handler<br/>(Catches WebClientResponseException / 4xx / 5xx)"]
-            Parser["🔍 Jackson JSON Parser<br/>Extracts: candidates[0].content.parts[0].text"]
-        end
+    subgraph Backend ["2. Spring Boot Backend (:8080)"]
+        direction TB
+        C["🌐 REST Controller<br/>(/api/email/generate)"]
+        D["⚙️ Email Service<br/>(Builds Prompt & Tone)"]
+        E["⚡ WebClient<br/>(Spring WebFlux)"]
+        C --> D
+        D --> E
     end
 
-    %% External Google Gemini AI Cloud
-    subgraph CloudAI ["3. GOOGLE GEMINI AI CLOUD"]
-        GeminiAPI["✨ Google Generative Language API<br/>Endpoint: /v1beta/models/gemini-3.5-flash-lite:generateContent"]
-        LLMEngine["🤖 Gemini 3.5 Flash Lite Engine<br/>• Context analysis<br/>• Tone adaptation<br/>• Reply synthesis"]
+    subgraph AI ["3. AI Cloud"]
+        F["✨ Google Gemini API<br/>(gemini-3.5-flash-lite)"]
     end
 
-    %% Connections and Data Flow
-    UI_Input --> UI_State
-    UI_State -->|"POST /api/email/generate (JSON)"| GenEP
-    UI_State -->|"GET /api/email/health"| HealthEP
-    
-    Ext_Observer -->|"Compose Window Detected"| Ext_Extract
-    Ext_Extract -->|"POST /api/email/generate (JSON)"| GenEP
-
-    GenEP --> KeyResolver
-    KeyResolver --> PromptPipeline
-    PromptPipeline --> PayloadBuilder
-    PayloadBuilder --> WebClient
-
-    WebClient -->|"HTTPS POST (Payload + API Key)"| GeminiAPI
-    GeminiAPI --> LLMEngine
-    LLMEngine -->|"Raw JSON Candidates"| GeminiAPI
-    GeminiAPI -->|"HTTP 200 JSON Response"| WebClient
-
-    WebClient --> ErrorHandler
-    ErrorHandler --> Parser
-    Parser -->|"Clean Reply Text"| GenEP
-    
-    GenEP -->|"HTTP 200 Plain Text Reply"| UI_Actions
-    GenEP -->|"HTTP 200 Plain Text Reply"| Ext_Inject
+    A -->|"1. Send Email & Tone"| C
+    B -->|"1. Send Email & Tone"| C
+    E -->|"2. Request AI Reply"| F
+    F -->|"3. Return Generated Reply"| E
+    C -->|"4. Display / Insert Reply"| A
+    C -->|"4. Display / Insert Reply"| B
 ```
 
----
-
-### 2. End-to-End Sequence & Data Flow Diagram
-
-This sequence diagram illustrates the exact chronological step-by-step lifecycle of an email generation request:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User / Sender
-    participant UI as Client (React UI / Chrome Ext)
-    participant Ctrl as EmailGeneratorController
-    participant Svc as EmailGeneratorService
-    participant WC as WebClient (WebFlux)
-    participant Gemini as Google Gemini API (3.5 Flash Lite)
-
-    %% Step 1: User Action
-    User->>UI: Pastes email / Clicks "AI Reply" in Gmail
-    Note over UI: Validates input & prepares payload<br/>{ emailContent, tone, length }
-
-    %% Step 2: Client to Backend
-    UI->>Ctrl: POST /api/email/generate (JSON)
-    Note over Ctrl: Deserializes into EmailRequest object
-
-    %% Step 3: Controller to Service
-    Ctrl->>Svc: generateEmailReply(emailRequest)
-    
-    %% Step 4: Key Resolution & Prompt Building
-    Note over Svc: 1. Resolves API Key (Client override vs GEMINI_KEY)<br/>2. Builds structured prompt without subject line<br/>3. Wraps into Gemini JSON structure
-    
-    %% Step 5: WebClient Call
-    Svc->>WC: post().uri(geminiApiUrl + apiKey).bodyValue(requestBody)
-    WC->>Gemini: HTTPS POST /v1beta/models/gemini-3.5-flash-lite:generateContent
-    
-    %% Step 6: Gemini Processing
-    Note over Gemini: Analyzes original email context<br/>Generates tone-adapted response
-    Gemini-->>WC: Returns HTTP 200 with candidates JSON
-    
-    %% Step 7: Response Extraction
-    WC-->>Svc: Response Mono (JSON string)
-    Note over Svc: Jackson ObjectMapper extracts:<br/>candidates[0].content.parts[0].text
-    
-    %% Step 8: Return to Client
-    Svc-->>Ctrl: Returns plain text reply
-    Ctrl-->>UI: HTTP 200 (Reply text)
-    
-    %% Step 9: User Output
-    alt If Web UI
-        UI->>User: Displays in editor card (editable + 1-click copy + saved in history)
-    else If Chrome Extension
-        UI->>User: Automatically types reply into Gmail compose box
-    end
-```
-
----
-
-### 3. Detailed Stage-by-Stage Workflow
-
-| Stage | Process | Technical Details |
-| :--- | :--- | :--- |
-| **1. Trigger & Input** | The user inputs an email via either the **Web App** or directly in **Gmail**. | In Gmail, `content.js` uses a `MutationObserver` to watch the DOM for compose dialogs (`.btC`, `.aDh`). When found, it injects an "AI Reply" button. When clicked, it extracts the thread text from `.h7` or `.a3s.aiL`. |
-| **2. API Ingestion** | The request is sent to the Spring Boot REST API. | Endpoint: `POST http://localhost:8080/api/email/generate`. Payload contains `{ emailContent, tone, length, additionalInstructions, apiKey }`. CORS is enabled via `@CrossOrigin(origins = "*")`. |
-| **3. Prompt Engineering** | The backend structures the AI instructions. | `EmailGeneratorService` builds a prompt: ensures no subject line is created, appends tone rules (*Professional*, *Casual*, *Concise*, etc.), length rules (*Concise*, *Balanced*, *Detailed*), and the raw email text. |
-| **4. Reactive WebClient Call** | Asynchronous HTTP request to Google Gemini API. | Uses Spring WebFlux `WebClient` to make an asynchronous call to Google's `gemini-3.5-flash-lite` model endpoint. |
-| **5. Parsing & Error Guard** | Parses Gemini response and handles any failures gracefully. | Uses Jackson `ObjectMapper` to parse the `candidates[0].content.parts[0].text` path. If the key is invalid or quota is exceeded, clean diagnostic text is returned instead of crashing the server with a 500 error. |
-| **6. Output Rendering** | Result is presented back to the user. | **React App:** Displays the response in an editable card with live word count, reading time, and 1-click clipboard copy. Saves draft to `localStorage`.<br/>**Chrome Extension:** Focuses Gmail's compose box and injects the text via `document.execCommand('insertText')`. |
+### How the Workflow Works in 4 Steps:
+1. **User Action:** The user enters an email and chooses a tone (via the **React Web App** or the **Gmail Chrome Extension**).
+2. **Backend Processing:** The **Spring Boot REST Controller** receives the request. The service layer formats the prompt with tone rules (*Professional, Casual, Concise, etc.*).
+3. **AI Generation:** The backend uses **WebClient** to send an API request to **Google Gemini** (`gemini-3.5-flash-lite`).
+4. **Result Delivery:** Gemini generates the response, the backend extracts the text, and returns it to be displayed in the web app or directly typed into Gmail.
 
 ---
 
