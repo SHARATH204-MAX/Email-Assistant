@@ -1,0 +1,14 @@
+.ai-reply-button {
+    transition: all 0.2s ease-in-out !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12) !important;
+}
+
+.ai-reply-button:hover {
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.4) !important;
+    transform: translateY(-1px) !important;
+}
+
+.ai-reply-button:active {
+    transform: translateY(0) !important;
+}
+
