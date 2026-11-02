@@ -1,267 +1,245 @@
-# 📬 MailCraft AI — Intelligent Email Reply Assistant
+# AI Email Reply Generator (MailCraft)
 
-[![Java 17](https://img.shields.io/badge/Java-17%2B-orange?logo=openjdk)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.9-brightgreen?logo=springboot)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-19.3-blue?logo=react)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-8.3-purple?logo=vite)](https://vitejs.dev/)
-[![Material UI](https://img.shields.io/badge/MUI-v9-007FFF?logo=mui)](https://mui.com/)
-[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash%20Lite-4285F4?logo=google)](https://ai.google.dev/)
-[![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-yellow?logo=googlechrome)](https://developer.chrome.com/docs/extensions/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+A full-stack web application and Chrome extension that generates smart, context-aware email replies using Spring Boot, React, and Google's Gemini API.
 
-An enterprise-ready, full-stack AI email reply ecosystem designed to eliminate inbox fatigue. **MailCraft AI** couples a high-performance **Spring Boot** reactive backend, a modern **React 19 + Material-UI** web studio, and a seamless **Gmail Chrome Extension (Manifest V3)** powered by Google's latest **Gemini 3.5 Flash Lite** model.
+I built this project to solve a simple everyday problem: writing repetitive emails and figuring out the right tone takes up too much time. This project combines a **Spring Boot backend**, a **React web interface**, and a **Chrome extension for Gmail** to generate quick email drafts in different tones (professional, casual, friendly, concise, etc.).
 
 ---
 
-## 🏛️ System Architecture
+## Architecture & Workflow
+
+Here is how the system works end-to-end:
+
+### Block Workflow Diagram
 
 ```mermaid
 flowchart TD
-    subgraph ClientLayer ["Client Layer"]
-        A["💻 React 19 Web Studio (Port 5173)"]
-        B["🧩 Gmail Chrome Extension (Manifest V3)"]
+    subgraph Step1 ["1. User Input"]
+        A["User on Web App<br/>(Pastes email + selects tone)"]
+        B["User on Gmail<br/>(Clicks 'AI Reply' button in compose box)"]
     end
 
-    subgraph BackendLayer ["Spring Boot Backend (Port 8080)"]
-        C["🌐 REST Controller (/api/email)"]
-        D["💓 Health & Telemetry (/api/email/health)"]
-        E["⚙️ EmailGeneratorService"]
-        F["🧠 Prompt Engineering Pipeline"]
-        G["⚡ WebClient Reactive HTTP Engine"]
+    subgraph Step2 ["2. Client Layer"]
+        C["React 19 Frontend<br/>(Vite + Material UI)"]
+        D["Chrome Extension<br/>(Manifest V3 content.js)"]
     end
 
-    subgraph ExternalServices ["External AI Provider"]
-        H["✨ Google Gemini API\n(gemini-3.5-flash-lite)"]
+    subgraph Step3 ["3. Backend API (Spring Boot :8080)"]
+        E["EmailGeneratorController<br/>POST /api/email/generate"]
+        F["EmailGeneratorService<br/>(Builds custom prompt with tone & instructions)"]
+        G["WebClient (Spring WebFlux)<br/>(Sends POST request with payload)"]
     end
 
-    A -->|"POST /api/email/generate (JSON)"| C
-    A -->|"GET /api/email/health"| D
-    B -->|"Injects AI Button into Gmail DOM"| B
-    B -->|"POST /api/email/generate"| C
-    
-    C --> E
+    subgraph Step4 ["4. AI Model"]
+        H["Google Gemini API<br/>(gemini-3.5-flash-lite)"]
+    end
+
+    subgraph Step5 ["5. Response Handling"]
+        I["Response Parser<br/>(Extracts text from candidate JSON)"]
+        J["Display in Web UI / Copy to Clipboard"]
+        K["Auto-insert into Gmail Compose Box"]
+    end
+
+    A --> C
+    B --> D
+    C -->|"JSON Request"| E
+    D -->|"JSON Request"| E
     E --> F
     F --> G
-    G -->|"REST HTTPS /v1beta"| H
-    H -->|"Generated AI Reply"| G
-    G --> E
-    E --> C
-    C -->|"Clean Formatted Reply"| ClientLayer
+    G -->|"HTTPS Call"| H
+    H -->|"JSON Response"| G
+    G --> I
+    I --> C
+    I --> D
+    C --> J
+    D --> K
 ```
 
----
-
-## ✨ Key Features
-
-* **🎭 Context-Aware Tone Control:** Switch communication styles seamlessly between:
-  * 💼 **Professional:** Executive, formal, and structured.
-  * ☕ **Casual:** Warm, relaxed, and approachable.
-  * 🤝 **Friendly:** Enthusiastic, kind, and empathetic.
-  * ⚡ **Concise:** Crisp, bullet-pointed, and direct.
-  * 🎯 **Persuasive:** Compelling with clear calls-to-action.
-  * 🙏 **Apologetic:** Sincere, constructive, and solution-oriented.
-* **📏 Granular Length Selection:** Choose between *Concise*, *Balanced*, or *Comprehensive*.
-* **✏️ Inline Editor Studio:** Edit generated replies directly within the card before copying.
-* **⚡ 1-Click Clipboard Copy:** Animated copy button with instant toast feedback.
-* **🔄 Quick Refinement Prompts:** Instant refinement chips (*Make Shorter*, *More Formal*, *Add Gratitude*, *Request Call*).
-* **📚 Local Draft History:** Automatically saves the last 20 generated drafts in browser storage.
-* **🔌 Real-Time Telemetry:** Live navbar health badge detecting backend connectivity and API key status.
-* **📬 Gmail Chrome Extension:** Automatically detects open compose windows in Gmail and injects an AI reply button directly into your toolbar.
-* **🛡️ Fail-Safe Fallbacks:** Comprehensive error handling preventing raw HTTP 500 server crashes with client-side API key configuration support.
+### Text Flow Summary:
+1. **User Action:** The user either pastes an email into the React web app or opens an email thread in Gmail where the Chrome extension injects an **AI Reply** button.
+2. **Request:** The frontend sends a `POST` request with the email content, tone, and desired length to `http://localhost:8080/api/email/generate`.
+3. **Prompt Building:** The Spring Boot backend constructs a clean prompt instructing the model to generate only the email body without a subject line.
+4. **Gemini API Call:** Spring WebFlux `WebClient` makes a reactive call to Google's `gemini-3.5-flash-lite` endpoint.
+5. **Output Delivery:** The backend extracts the text from the response and sends it back. In the React app, the user can edit or copy it with one click. In Gmail, the extension directly pastes the reply into the compose box.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack Used
 
-| Category | Technology | Version | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Backend Framework** | Spring Boot | 4.0.9 | High-throughput REST API & reactive web client |
-| **Backend Language** | Java (JDK) | 17 LTS | Core server implementation |
-| **Build Tool (Backend)** | Apache Maven | 3.10.x | Dependency management and packaging |
-| **HTTP Client** | Spring WebFlux (`WebClient`) | 7.0.x | Non-blocking communication with Google Gemini |
-| **Frontend Framework** | React | 19.3.x | Modern reactive component architecture |
-| **Build Tool (Frontend)** | Vite | 8.3.x | Ultra-fast bundling, HMR, and build pipeline |
-| **UI Component Library** | Material UI (MUI) | 9.5.x | Accessible, modern enterprise design system |
-| **Icons & Styling** | Emotion + SvgIcon | 11.14.x | Lightweight SVG icon system and theme engine |
-| **Browser Extension** | Chrome Extensions API | Manifest V3 | DOM Observer & content script for Gmail integration |
-| **LLM Provider** | Google Gemini | 3.5 Flash Lite | State-of-the-art low-latency language model |
+### Backend
+* **Java 17 (LTS):** Core programming language.
+* **Spring Boot 4.0.9:** REST API framework, dependency injection, and server configuration.
+* **Spring WebFlux (WebClient):** Non-blocking HTTP client used to call the Gemini API.
+* **Jackson:** JSON serialization and deserialization.
+* **Lombok:** Reduces boilerplate code (getters, setters, constructors).
+* **Maven:** Dependency management and build tool.
+
+### Frontend
+* **React 19:** Component-based UI library.
+* **Vite:** Fast development server and build bundler.
+* **Material UI (MUI v9) & Emotion:** Clean UI components (Cards, Buttons, TextFields, Dark/Light theme).
+* **Axios:** Handles HTTP requests to the backend.
+
+### Chrome Extension
+* **Manifest V3:** Modern Chrome extension standard.
+* **Vanilla JavaScript:** DOM observer (`MutationObserver`) to detect Gmail compose windows and inject the AI button.
+* **CSS:** Custom button styling matching Gmail's native UI.
+
+### AI Engine
+* **Google Gemini API (`gemini-3.5-flash-lite`):** Fast, low-latency LLM for email text generation.
 
 ---
 
-## 📂 Repository Structure
+## Project Structure
 
 ```text
 Email-writer/
-├── Email-Writer-SB/                     # Spring Boot Backend Service
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/com/email/writer/
-│   │   │   │   ├── EmailWriterApplication.java      # Application entrypoint
-│   │   │   │   ├── EmailGeneratorService.java       # Gemini API client & prompt builder
-│   │   │   │   └── app/
-│   │   │   │       ├── EmailGeneratorController.java # REST API endpoints
-│   │   │   │       └── EmailRequest.java            # DTO payload model
-│   │   │   └── resources/
-│   │   │       └── application.properties           # Spring Boot configuration
-│   │   └── test/                                    # Unit & integration tests
-│   ├── mvnw / mvnw.cmd                              # Maven wrappers
-│   └── pom.xml                                      # Maven dependencies & plugins
+├── Email-Writer-SB/               # Spring Boot Backend
+│   ├── src/main/java/com/email/writer/
+│   │   ├── EmailWriterApplication.java      # Main entry point
+│   │   ├── EmailGeneratorService.java       # Calls Gemini & parses output
+│   │   └── app/
+│   │       ├── EmailGeneratorController.java # Endpoints (/health, /generate)
+│   │       └── EmailRequest.java            # Request DTO
+│   ├── src/main/resources/
+│   │   └── application.properties           # Server & API configuration
+│   └── pom.xml                              # Maven dependencies
 │
-├── emali-writer-react/                  # React 19 Frontend Web Studio
+├── emali-writer-react/            # React Frontend
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Navbar.jsx                           # Header with telemetry & theme toggle
-│   │   │   ├── ToneSelector.jsx                     # Interactive tone pills
-│   │   │   ├── SettingsModal.jsx                    # Client API key & backend URL modal
-│   │   │   ├── HistoryDrawer.jsx                    # Saved drafts slide-over drawer
-│   │   │   └── Icons.jsx                            # High-performance SVG icon components
-│   │   ├── App.jsx                                  # Main dual-pane application layout
-│   │   ├── index.css                                # Global styling & scrollbars
-│   │   └── main.jsx                                 # React root mount
-│   ├── index.html                                   # HTML5 shell with Google Fonts
-│   ├── package.json                                 # NPM dependencies & scripts
-│   └── vite.config.js                               # Vite bundler configuration
+│   │   │   ├── Navbar.jsx                   # Top header with health check & theme toggle
+│   │   │   ├── ToneSelector.jsx             # Tone chips (Professional, Casual, etc.)
+│   │   │   ├── SettingsModal.jsx            # Configure API key & backend URL
+│   │   │   ├── HistoryDrawer.jsx            # Drawer showing saved recent replies
+│   │   │   └── Icons.jsx                    # SVG icon components
+│   │   ├── App.jsx                          # Main application layout
+│   │   ├── index.css                        # Global styling
+│   │   └── main.jsx                         # React root entry
+│   ├── package.json
+│   └── vite.config.js
 │
-├── email-writer_ext/                    # Chrome Extension for Gmail
-│   ├── manifest.json                                # Manifest V3 permissions & content script
-│   ├── content.js                                   # Gmail DOM observer & button injection
-│   └── content.css                                  # Extension styling
+├── email-writer_ext/              # Chrome Extension for Gmail
+│   ├── manifest.json                        # Extension manifest
+│   ├── content.js                           # Gmail DOM injection script
+│   └── content.css                          # Button styling
 │
-├── .env.example                                     # Environment variables template
-├── .gitignore                                       # Root git exclusions
-├── .gitattributes                                  # Line ending normalization
-└── README.md                                        # Master documentation
+├── .env.example                             # Environment variables template
+├── .gitignore                               # Git ignored files
+└── README.md                                # Project documentation
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## Features
 
-### 1. Prerequisites
-
-Ensure you have the following installed on your machine:
-* [Java Development Kit (JDK 17+)](https://www.oracle.com/java/technologies/downloads/#java17)
-* [Node.js (v18+) & npm](https://nodejs.org/)
-* [Apache Maven (v3.8+)](https://maven.apache.org/) (or use included `mvnw.cmd`)
-* A free [Google Gemini API Key](https://aistudio.google.com/app/apikey)
+* **Multiple Tone Options:** Professional, Casual, Friendly, Concise, Persuasive, and Apologetic.
+* **Length Selection:** Short/Concise, Balanced, or Comprehensive reply.
+* **Quick Templates:** 1-click test templates (Reschedule Meeting, Project Inquiry, Polite Decline, Job Offer).
+* **In-place Editing:** Edit the generated reply right inside the card before copying.
+* **1-Click Copy:** Copy button with instant toast notification.
+* **Quick Refinement Chips:** Buttons like *Make Shorter*, *More Formal*, *Add Gratitude*, or *Request Call*.
+* **Drafts History:** Saves recently generated replies in browser storage so you don't lose them.
+* **Dark / Light Mode:** Built-in theme switcher.
+* **Live Backend Health Status:** Green/Red connection pill in the navbar showing whether the Spring Boot server is online.
+* **Safe API Key Setup:** You can set the Gemini key in the environment or directly in the app's Settings modal.
 
 ---
 
-### 2. Configure Environment
+## How to Run This Project Locally
 
-Copy `.env.example` to create your local `.env`:
+### Prerequisites
+Make sure you have installed:
+1. **JDK 17 or higher** (`java -version`)
+2. **Node.js (v18+) & npm** (`node -v`)
+3. **Maven** (`mvn -version`)
+4. A free **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
+---
+
+### Step 1: Clone the Repository
 ```bash
-cp .env.example .env
-```
-
-Set your Gemini API Key:
-
-```env
-GEMINI_URL=https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=
-GEMINI_KEY=your_gemini_api_key_here
-PORT=8080
+git clone https://github.com/<your-username>/Email-writer.git
+cd Email-writer
 ```
 
 ---
 
-### 3. Run the Spring Boot Backend
+### Step 2: Run the Spring Boot Backend
 
-Navigate to `Email-Writer-SB`:
-
-```bash
-cd Email-Writer-SB
-```
-
-Build the project:
-```bash
-mvn clean package -DskipTests
-```
-
-Run the application:
-```bash
-# Windows PowerShell
-$env:GEMINI_KEY = "your_gemini_api_key_here"
-java -jar target/Email-writer-0.0.1-SNAPSHOT.jar
-
-# Linux / macOS
-GEMINI_KEY="your_gemini_api_key_here" java -jar target/Email-writer-0.0.1-SNAPSHOT.jar
-```
-
-The backend server will start on **`http://localhost:8080`**.
+1. Navigate to the backend folder:
+   ```bash
+   cd Email-Writer-SB
+   ```
+2. Build the project:
+   ```bash
+   mvn clean package -DskipTests
+   ```
+3. Set your Gemini API key and start the server:
+   * **On Windows (PowerShell):**
+     ```powershell
+     $env:GEMINI_KEY = "YOUR_GEMINI_API_KEY"
+     java -jar target/Email-writer-0.0.1-SNAPSHOT.jar
+     ```
+   * **On Linux / Mac:**
+     ```bash
+     GEMINI_KEY="YOUR_GEMINI_API_KEY" java -jar target/Email-writer-0.0.1-SNAPSHOT.jar
+     ```
+4. The backend will start on **`http://localhost:8080`**.  
+   You can verify it by opening `http://localhost:8080/api/email/health` in your browser.
 
 ---
 
-### 4. Run the React Web Studio
+### Step 3: Run the React Frontend
 
-Open a new terminal tab and navigate to `emali-writer-react`:
-
-```bash
-cd emali-writer-react
-npm install
-npm run dev
-```
-
-Open your browser at **`http://localhost:5173`**.
-
----
-
-### 5. Install the Gmail Chrome Extension
-
-1. Open Google Chrome and navigate to `chrome://extensions/`.
-2. Turn on **Developer mode** in the upper-right corner.
-3. Click **Load unpacked**.
-4. Select the **`email-writer_ext`** folder in this repository.
-5. Open [Gmail](https://mail.google.com/), open any email, and click **Reply** — you will see the **AI Reply** button appear in the compose toolbar.
+1. Open a new terminal tab and go to the frontend directory:
+   ```bash
+   cd emali-writer-react
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+4. Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 📡 API Reference
+### Step 4: Install the Chrome Extension (Optional)
 
-### Health Check
+If you want to use it directly in Gmail:
+1. Open Google Chrome and go to `chrome://extensions/`.
+2. Turn on **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked** and select the `email-writer_ext` folder from this repo.
+4. Go to [Gmail](https://mail.google.com/), open any email thread, and hit **Reply**.
+5. You will see an **AI Reply** button added to the compose toolbar.
 
-Check service health and API key readiness:
+---
 
-```http
-GET /api/email/health
-```
+## API Endpoints
 
-**Response (`200 OK`):**
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/email/health` | Health check returning server status and whether API key is configured. |
+| `POST` | `/api/email/generate` | Generates email reply based on content and tone. |
+
+### Example Request Body
 ```json
 {
-  "status": "UP",
-  "service": "Email Writer AI Backend",
-  "apiKeyConfigured": true
-}
-```
-
----
-
-### Generate Email Reply
-
-Generate an AI-powered response:
-
-```http
-POST /api/email/generate
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "emailContent": "Hi Team, can we schedule a call tomorrow at 3 PM to review the proposal?",
+  "emailContent": "Hi, can you send the updated project report by 4 PM?",
   "tone": "professional",
-  "length": "concise",
-  "additionalInstructions": "Confirm availability and suggest Google Meet",
-  "apiKey": "optional_client_side_override_key"
+  "length": "concise"
 }
 ```
 
-**Response (`200 OK`):**
+### Example Response
 ```text
 Hi [Name],
 
-Yes, 3 PM tomorrow works well for me. I will send over a Google Meet invite shortly.
+I am finalizing the updated project report now and will send it over before 4 PM.
 
 Best regards,
 [Your Name]
@@ -269,26 +247,24 @@ Best regards,
 
 ---
 
-## 🔒 Security & Privacy
+## What I Learned from Building This
 
-* **Zero Hardcoded Secrets:** No API keys are committed to Git. All secret variables are managed via environment variables or git-ignored local files (`.env`, `application-local.properties`).
-* **Client-Side Key Option:** Users can supply an API key directly in the web UI Settings dialog, which is stored solely in their local browser `localStorage`.
-* **CORS Configured:** Backend accepts requests from localhost origins with standard headers.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to open a Pull Request or submit an issue:
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+* How to integrate Spring Boot with third-party AI APIs using non-blocking **Spring WebFlux `WebClient`**.
+* Handling CORS between a Spring Boot API, a React frontend, and a browser extension.
+* Writing Chrome content scripts with `MutationObserver` to interact with dynamically rendered Gmail elements.
+* Designing a clean dual-pane UI in React using Material UI and managing dark/light mode state.
+* Implementing fallback error handling so the app doesn't crash if an API key is missing or invalid.
 
 ---
 
-## 📄 License
+## Future Improvements
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+* Add user accounts and cloud history storage (e.g., using Firebase or PostgreSQL).
+* Add support for generating replies in multiple languages.
+* Support file attachment summaries before replying.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
